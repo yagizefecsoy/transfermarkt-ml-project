@@ -119,3 +119,47 @@ after = df.shape[0]
 
 print(f"\nYaş filtresi sonrası: {before} -> {after} satır ({before - after} satır silindi)")
 print(df["age"].describe())
+
+# 11. Tüm sütunlarda eksik değer var mı kontrol et
+print("\n=== EKSİK DEĞER KONTROLÜ ===")
+print(df.isnull().sum())
+
+# 12. Eksik değerleri doldur/temizle
+df = df.dropna(subset=["sub_position", "domestic_competition_id"])  # az sayıda, direkt sil
+
+df["foot"] = df["foot"].fillna("Unknown")  # kategorik, "bilinmiyor" olarak işaretle
+df["height_in_cm"] = df["height_in_cm"].fillna(df["height_in_cm"].median())  # medyan ile doldur
+df["international_caps"] = df["international_caps"].fillna(0)  # hiç çağrılmamış = 0
+df["international_goals"] = df["international_goals"].fillna(0)  # hiç çağrılmamış = 0
+
+print("\n=== EKSİK DEĞER TEMİZLİĞİ SONRASI ===")
+print(df.shape)
+print(df.isnull().sum())
+
+print("\nFarklı ülke sayısı:", df["country_of_citizenship"].nunique())
+print("Farklı pozisyon sayısı:", df["position"].nunique())
+print("Farklı alt pozisyon sayısı:", df["sub_position"].nunique())
+print("Farklı lig sayısı:", df["domestic_competition_id"].nunique())
+
+# 13. country_of_citizenship: en az 100 oyuncusu olan ülkeleri tut, gerisini "Other" yap
+country_counts = df["country_of_citizenship"].value_counts()
+countries_to_keep = country_counts[country_counts >= 100].index
+
+df["country_of_citizenship"] = df["country_of_citizenship"].apply(
+    lambda x: x if x in countries_to_keep else "Other"
+)
+
+print("\nGruplama sonrası ülke sayısı:", df["country_of_citizenship"].nunique())
+print(df["country_of_citizenship"].value_counts())
+
+# 14. Kategorik sütunları one-hot encoding ile sayısala çevir
+categorical_columns = ["country_of_citizenship", "position", "sub_position", "foot", "domestic_competition_id"]
+df = pd.get_dummies(df, columns=categorical_columns, drop_first=True)
+
+print("\n=== ONE-HOT ENCODING SONRASI ===")
+print(df.shape)
+print(df.columns.tolist())
+
+# 15. Temizlenmiş veriyi kaydet
+df.to_csv("../data/processed/players_cleaned.csv", index=False)
+print("\nTemizlenmiş veri kaydedildi: data/processed/players_cleaned.csv")
