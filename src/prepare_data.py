@@ -9,6 +9,20 @@ import pandas as pd
 players = pd.read_csv("../data/raw/players.csv")
 appearances = pd.read_csv("../data/raw/appearances.csv")
 
+# last_season sütununu incele
+print("last_season değerleri:", players["last_season"].unique())
+print("last_season min/max:", players["last_season"].min(), players["last_season"].max())
+
+# last_season sütununu incele
+print("last_season değerleri:", players["last_season"].unique())
+print("last_season min/max:", players["last_season"].min(), players["last_season"].max())
+
+# 0. Sadece güncel/aktif oyuncuları tut (son 2 sezon içinde oynamış olanlar)
+before = players.shape[0]
+players = players[players["last_season"] >= 2023]
+after = players.shape[0]
+print(f"\nAktif oyuncu filtresi: {before} -> {after} satır ({before - after} satır silindi)")
+
 # 1. Appearances'ı oyuncu bazında grupla (her oyuncu için toplamlar)
 performance = appearances.groupby("player_id").agg(
     total_matches=("appearance_id", "count"),
@@ -79,3 +93,29 @@ print("\n=== SADECE GEREKLİ SÜTUNLAR ===")
 print(df.shape)
 print(df.columns.tolist())
 print(df.head())
+
+# 9. Doğum tarihinden yaş hesapla
+df["date_of_birth"] = pd.to_datetime(df["date_of_birth"])
+today = pd.Timestamp("today")
+df["age"] = (today - df["date_of_birth"]).dt.days // 365
+
+# date_of_birth artık gereksiz, yaşı hesapladık
+df = df.drop(columns=["date_of_birth"])
+
+print("\n=== YAŞ EKLENDİKTEN SONRA ===")
+print(df[["age"]].describe())
+
+# Yaş NaN olanları kontrol et
+print("\nYaş hesaplanamayan satır sayısı:", df["age"].isnull().sum())
+
+# Şüpheli yüksek yaşları kontrol et (örn. 45 üstü kaç kişi var?)
+print("45 yaş üstü oyuncu sayısı:", (df["age"] > 45).sum())
+print(df[df["age"] > 45][["age", "market_value_in_eur"]].head(10))
+
+# 10. Gerçekçi olmayan yaşları filtrele (muhtemelen hatalı/eski kayıtlar)
+before = df.shape[0]
+df = df[(df["age"] >= 16) & (df["age"] <= 45)]
+after = df.shape[0]
+
+print(f"\nYaş filtresi sonrası: {before} -> {after} satır ({before - after} satır silindi)")
+print(df["age"].describe())
