@@ -77,6 +77,31 @@ def main():
     df["international_goals"] = df["international_goals"].fillna(0)
     # height_in_cm ve foot eksikleri burada doldurulmaz: pipeline eğitim verisine göre doldurur.
 
+    # 9. Ek özellik 1: bir yıl önceki piyasa değeri (player_valuations.csv)
+    # Hedef (market_value_in_eur), oyuncunun EN SON değerlemesidir. Sızıntı olmaması için
+    # bu tarihten EN AZ 365 gün önceki son değerleme alınır; daha yakın tarihli bir değer
+    # kullanılsaydı model cevaba çok yakın bir bilgiyi görmüş olurdu.
+    valuations = pd.read_csv(raw_file("player_valuations.csv"),
+                             usecols=["player_id", "date", "market_value_in_eur"])
+    valuations["date"] = pd.to_datetime(valuations["date"])
+    valuations = valuations.sort_values(["player_id", "date"])
+    target_date = valuations.groupby("player_id")["date"].max().rename("target_date")
+    valuations = valuations.join(target_date, on="player_id")
+    old = valuations[valuations["date"] <= valuations["target_date"] - pd.Timedelta(days=365)]
+    previous = old.groupby("player_id").tail(1).set_index("player_id")
+    df = df.join(pd.DataFrame({
+        "value_1y_ago": previous["market_value_in_eur"],
+        "value_1y_ago_age_days": (previous["target_date"] - previous["date"]).dt.days,
+    }), on="player_id")
+    df = df.join(target_date, on="player_id")
+    print(f"Bir yıl önceki değeri bulunan oyuncu: {df['value_1y_ago'].notna().mean():.0%}")
+
+    # 10. Ek özellik 2: sözleşmenin bitmesine kalan yıl (hedef değerleme tarihine göre)
+    contract_end = pd.to_datetime(df["contract_expiration_date"])
+    df["contract_years_left"] = (contract_end - df["target_date"]).dt.days / 365.25
+    print(f"Sözleşme bilgisi olan oyuncu: {df['contract_years_left'].notna().mean():.0%}")
+    # İki özellikteki eksikler de pipeline'da doldurulur ("eksik" bilgisi ayrı bir sütun olarak korunur).
+
     columns_to_keep = [
         "player_id", "market_value_in_eur",
         "age", "height_in_cm", "foot",
@@ -85,6 +110,7 @@ def main():
         "total_matches", "total_goals", "total_assists", "total_minutes",
         "total_yellow_cards", "total_red_cards",
         "goals_per_match", "assists_per_match", "minutes_per_match",
+        "value_1y_ago", "value_1y_ago_age_days", "contract_years_left",
     ]
     df = df[columns_to_keep].sort_values("player_id").reset_index(drop=True)
 

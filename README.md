@@ -3,7 +3,7 @@
 Transfermarkt verisiyle futbolcuların piyasa değerini tahmin eden bir **denetimli (supervised)** model ve oyuncuları özelliklerine göre gruplara ayıran bir **denetimsiz (unsupervised)** model.
 
 **Sonuç:**
-- **Piyasa değeri tahmini (Gradient Boosting):** Test verisindeki oyuncuların yarısında hata **370 bin €'nun** altında kaldı. Oyuncuların **%53'ünde** tahmin, gerçek değerin ±%50'si içinde.
+- **Piyasa değeri tahmini (Gradient Boosting):** Test verisindeki oyuncuların yarısında hata **235 bin €'nun** altında kaldı. Oyuncuların **%71'inde** tahmin, gerçek değerin ±%50'si içinde (R² = 0,83).
 - **Oyuncu kümeleme (K-Means, K=3):** Kümeleme piyasa değerini hiç kullanmadı. Buna rağmen üç kümenin medyan değerleri belirgin biçimde ayrıştı: 0,7M €, 1,4M € ve 3,5M €.
 
 ---
@@ -31,8 +31,10 @@ Kaynak: [Transfermarkt veri seti (Kaggle, davidcariboo/player-scores)](https://w
 | Milli takım | `international_caps`, `international_goals` |
 | Kariyer toplamları (`appearances.csv`) | `total_matches`, `total_goals`, `total_assists`, `total_minutes`, `total_yellow_cards`, `total_red_cards` |
 | Oranlar | `goals_per_match`, `assists_per_match`, `minutes_per_match` |
+| **Geçmiş değer** (`player_valuations.csv`) | `value_1y_ago`: hedef değerden **en az 1 yıl önceki** son piyasa değeri. `value_1y_ago_age_days`: o değerin ne kadar eski olduğu |
+| **Sözleşme** | `contract_years_left`: sözleşmenin bitmesine kalan yıl |
 
-`highest_market_value_in_eur` bilerek kullanılmadı. Hedefle çok yakından bağlantılı olduğu için kullanılsaydı model "kopya çekmiş" olurdu.
+`highest_market_value_in_eur` bilerek kullanılmadı. Oyuncunun bugünkü değerini de içerebildiği için kullanılsaydı model "kopya çekmiş" olurdu. Aynı sebeple geçmiş değer olarak sadece en az bir yıl önceki değerleme alındı (bkz. bölüm 4).
 
 ---
 
@@ -48,35 +50,67 @@ Kaynak: [Transfermarkt veri seti (Kaggle, davidcariboo/player-scores)](https://w
 
 | Model | En iyi ayarlar | CV MAE |
 |---|---|---:|
-| Ridge Regression (baseline) | alpha=0.1 | 2.685.299 € ± 145.483 |
-| Random Forest | min_samples_leaf=1, max_features=1.0 | 2.173.589 € ± 108.444 |
-| **Gradient Boosting** ✅ | learning_rate=0.1, max_leaf_nodes=15 | **1.924.524 € ± 87.645** |
+| Ridge Regression (baseline) | alpha=100 | 1.564.315 € ± 133.271 |
+| Random Forest | min_samples_leaf=1, max_features=1.0 | 1.471.811 € ± 48.663 |
+| **Gradient Boosting** ✅ | learning_rate=0.03, max_leaf_nodes=31 | **1.376.172 € ± 62.425** |
 
 ### Test sonuçları (2.681 oyuncu)
 
-| Ölçüt | Anlamı | Eski yaklaşım (RF, log yok) | **Seçilen model** |
-|---|---|---:|---:|
-| Medyan mutlak hata | Oyuncuların yarısında hata bundan küçük | 630.500 € | **369.997 €** |
-| Medyan yüzde hata | Tipik oyuncuda hata, değerinin yüzde kaçı? | %65,8 | **%47,2** |
-| ±%50 içinde | Tahmini gerçeğe yeterince yakın olanların oranı | %40,0 | **%53,2** |
-| MAE | Ortalama mutlak hata | 2.125.970 € | **1.883.716 €** |
-| R² | Varyansın ne kadarı açıklanıyor? | 0,701 | 0,692 |
+Üç sürüm de aynı test oyuncularında ölçüldü:
 
-İki satır aynı veri hazırlığı ve aynı test oyuncularıyla hesaplandı.
+| Ölçüt | Anlamı | İlk yaklaşım (RF, log yok) | Ek özelliklerden önce (GB, log) | **Final model** |
+|---|---|---:|---:|---:|
+| Medyan mutlak hata | Oyuncuların yarısında hata bundan küçük | 636.375 € | 372.353 € | **234.919 €** |
+| Medyan yüzde hata | Tipik oyuncuda hata, değerinin yüzde kaçı? | %65,3 | %47,4 | **%30,5** |
+| ±%50 içinde | Tahmini gerçeğe yeterince yakın olanlar | %39,8 | %53,6 | **%70,9** |
+| 2 kat veya daha fazla yanlış | Çok kötü tahminlerin oranı | %46,7 | %35,7 | **%18,1** |
+| MAE | Ortalama mutlak hata | 2.119.818 € | 1.921.132 € | **1.367.863 €** |
+| R² | Varyansın ne kadarı açıklanıyor? | 0,703 | 0,672 | **0,833** |
 
-**R² neden biraz düştü?** R², büyük hataların karesine baktığı için birkaç pahalı yıldızın etkisine çok duyarlı. Log dönüşümü modeli bütün oyuncular için dengeli hale getiriyor. Bu yüzden R² yaklaşık 0,01 düşerken tipik oyuncu için hata %41 azaldı. Proje ilk geliştirilirken log dönüşümü sadece R²'ye bakılarak geri alınmıştı. Diğer ölçütler kontrol edilince bu kararın yanlış olduğu görüldü.
+**Basitçe:** 10 oyuncudan ilk yaklaşım 4'ünü, ek özelliklerden önceki model 5'ini, final model **7'sini** gerçek değerin ±%50'si içinde tahmin ediyor.
+
+**Log dönüşümünde R² neden düştü?** R², büyük hataların karesine baktığı için birkaç pahalı yıldızın etkisine çok duyarlı. Log dönüşümü modeli bütün oyuncular için dengeli hale getiriyor. Bu yüzden ilk iki sütun arasında R² biraz düşerken tipik oyuncu için hata %41 azaldı. Proje ilk geliştirilirken log dönüşümü sadece R²'ye bakılarak geri alınmıştı. Diğer ölçütler kontrol edilince bu kararın yanlış olduğu görüldü.
 
 ![Gerçek vs tahmin](reports/figures/gercek_vs_tahmin.png)
 
 ### Hangi özellikler önemli?
 
-Permutation importance yöntemiyle ölçüldü: bir özellik karıştırıldığında hatanın ne kadar arttığına bakılıyor. En önemli üç özellik **yaş**, **toplam dakika** ve **lig**. Ayak tercihi, boy ve kart sayıları neredeyse hiç katkı vermiyor.
+Permutation importance yöntemiyle ölçüldü: bir özellik karıştırıldığında hatanın ne kadar arttığına bakılıyor. Açık ara en önemli özellik **bir yıl önceki değer**. Onu **yaş**, **lig** ve oynanan dakika izliyor. Sözleşme süresi de ilk altıya giriyor. Ayak tercihi, boy ve kart sayıları neredeyse hiç katkı vermiyor.
 
 ![Özellik önemi](reports/figures/ozellik_onemi.png)
 
 ---
 
-## 4. Unsupervised: oyuncu kümeleme
+## 4. Ek geliştirme: geçmiş değer ve sözleşme süresi
+
+İlk modelin en büyük hataları, kariyer istatistikleri güçlü ama değeri düşmüş oyuncularda (ör. Sebastian Szymański: gerçek 12M €, tahmin 40M €) ve verisi eksik oyuncularda (ör. Mohamed Camara: gerçek 20M €, tahmin 2M €) çıkıyordu. Model oyuncunun "piyasadaki itibarını" bilmiyordu. Bu yüzden iki özellik denendi:
+
+1. **Bir yıl önceki piyasa değeri** (`player_valuations.csv`)
+2. **Sözleşmenin bitmesine kalan süre** (`players.csv`)
+
+**Veri sızıntısını önlemek için:** Hedef, oyuncunun en son değerlemesi. Geçmiş değer olarak bu tarihten **en az 365 gün önceki** son değerleme alındı. Daha yakın tarihli bir değer kullanılsaydı model cevabın neredeyse aynısını görmüş olurdu. Sözleşme süresi de aynı tarihe göre hesaplandı.
+
+Üç sürüm aynı test oyuncularında, aynı model ailesi (Gradient Boosting) ve aynı ayar aramasıyla karşılaştırıldı:
+
+| Sürüm | Medyan yüzde hata | ±%50 içinde | 2 kat+ yanlış | R² |
+|---|---:|---:|---:|---:|
+| Ek özellik yok | %47,4 | %53,6 | %36 | 0,672 |
+| + bir yıl önceki değer | %31,6 | %69,9 | %19 | 0,830 |
+| **+ bir yıl önceki değer + sözleşme** ✅ | **%30,5** | **%70,9** | **%18** | **0,833** |
+
+| Örnek oyuncu | Gerçek | Ek özellik yok | Final model |
+|---|---:|---:|---:|
+| Sebastian Szymański | 12,0M € | 40,4M € ❌ | 18,9M € |
+| Mohamed Camara | 20,0M € | 2,3M € ❌ | 27,2M € ✓ |
+| David Raya* | 30,0M € | 8,1M € ❌ | 21,5M € ✓ |
+
+\* Szymański ve Camara test verisinde, Raya ise eğitim verisinde (yani model onu eğitimde görmüştü).
+
+**Karar:** Asıl iyileşmeyi bir yıl önceki değer getiriyor. Sözleşme süresinin katkısı küçük ama tutarlı ve modele mantıklı, açıklanabilir yeni bir bilgi ekliyor. Bu yüzden ikisi birlikte final modele alındı.
+
+---
+
+## 5. Unsupervised: oyuncu kümeleme
 
 ### Yöntem
 - **Özellikler:** Yaş, boy, milli maç/gol, kariyer maç/gol/asist/dakika, maç başına gol ve dakika. Kategorik sütunlar mesafe hesabını bozacağı için kullanılmadı.
@@ -99,7 +133,7 @@ Permutation importance yöntemiyle ölçüldü: bir özellik karıştırıldığ
 
 ---
 
-## 5. Geliştirme sürecinde düzeltilenler
+## 6. Geliştirme sürecinde düzeltilenler
 
 | Önceki durum | Sorun | Düzeltme |
 |---|---|---|
@@ -110,8 +144,9 @@ Permutation importance yöntemiyle ölçüldü: bir özellik karıştırıldığ
 | Tek bölme, ayar araması yoktu | Model seçimi şansa bağlıydı | 5 katlı CV ve 3 model karşılaştırması eklendi |
 | K=5 göz kararı seçilmişti | Seçim gerekçesiz kalıyordu | K, silhouette skoruna göre belirli bir kuralla seçiliyor |
 | Model kaydedilmiyordu, sonuçlar sadece terminale yazılıyordu | Tekrar üretilebilir değildi | Modeller `models/`, sonuçlar ve grafikler `reports/` klasörüne kaydediliyor |
+| Model sadece kariyer istatistiklerine bakıyordu | Değeri düşmüş veya verisi eksik oyuncularda büyük hatalar | Bir yıl önceki değer ve sözleşme süresi eklendi (bölüm 4) |
 
-## 6. Kurulum ve çalıştırma
+## 7. Kurulum ve çalıştırma
 
 Python 3.10 veya üzeri gerekir.
 
@@ -129,6 +164,7 @@ Temizlenmiş veri (`data/processed/players_cleaned.csv`) repoda bulunuyor. Doğr
 ```bash
 python src/train_model.py       # supervised (~2-3 dk)
 python src/cluster_players.py   # unsupervised (~1 dk)
+python src/predict.py           # kendi girdiğin oyuncu için değer tahmini + küme
 ```
 
 Veri hazırlığını sıfırdan çalıştırmak için önce Kaggle'dan veri setini indirip CSV dosyalarını `data/raw/` klasörüne koyun:
@@ -140,7 +176,7 @@ python src/prepare_data.py      # temizleme -> data/processed/players_cleaned.cs
 
 Tüm rastgelelikler `random_state=42` ile sabitlendi.
 
-## 7. Proje yapısı
+## 8. Proje yapısı
 
 ```
 transfermarkt-ml-project/
@@ -152,7 +188,8 @@ transfermarkt-ml-project/
 │   ├── explore_data.py          # ham verilere ilk bakış
 │   ├── prepare_data.py          # birleştirme, temizleme, özellik çıkarma
 │   ├── train_model.py           # supervised: model karşılaştırma, test, kaydetme
-│   └── cluster_players.py       # unsupervised: K seçimi, kümeleme
+│   ├── cluster_players.py       # unsupervised: K seçimi, kümeleme
+│   └── predict.py               # etkileşimli tahmin (kaydedilmiş modellerle)
 ├── models/                      # market_value_model.joblib, player_clusters.joblib
 ├── reports/
 │   ├── metrics_supervised.json
@@ -162,10 +199,10 @@ transfermarkt-ml-project/
 └── requirements.txt
 ```
 
-## 8. Sınırlar
+## 9. Sınırlar
 
-- **Piyasa değeri insan değerlendirmesidir.** Transfermarkt değerleri; sözleşme süresi, sakatlık, menajer ve medya ilgisi gibi bu veride olmayan etkenleri de yansıtır. Bu yüzden mükemmel bir tahmin beklenmemeli.
-- **Kariyer toplamları kullanıldı.** Son sezon formu ayrıca ölçülmedi. Formu yükselen genç bir oyuncunun değeri olduğundan düşük tahmin edilebilir.
+- **Piyasa değeri insan değerlendirmesidir.** Transfermarkt değerleri; sakatlık, menajer ve medya ilgisi gibi bu veride olmayan etkenleri de yansıtır. Bu yüzden mükemmel bir tahmin beklenmemeli.
+- **Model geçmiş değere çok dayanıyor.** Bir yılda değeri birden yükselen genç yetenekleri (ör. Rodrigo Mendoza: gerçek 20M €, tahmin 8M €) yakalayamıyor. Bir yıl önceki değeri olmayan oyuncularda (%6) tahmin daha zayıf.
+- **Kariyer toplamları kullanıldı.** Son sezon formu ayrıca ölçülmedi.
 - **Eksik maç verisi.** `appearances.csv` her ligi kapsamıyor. Maç kaydı olmayan aktif oyuncular modelden çıkarıldı.
-- **Tek zaman noktası.** Değerlerin zaman içindeki değişimi (`player_valuations.csv`) kullanılmadı.
 - **Kümeler zayıf ayrışıyor.** Silhouette skoru 0,33. Kümeler kesin oyuncu tiplerini değil, deneyim ekseni üzerindeki kabaca bölgeleri temsil ediyor.

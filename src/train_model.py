@@ -10,6 +10,8 @@ Adımlar:
    birkaç yıldız oyuncuya göre şekillenir.
 4. Üç model 5-katlı CV ile karşılaştırılır; seçim ölçütü € cinsinden MAE.
 5. Seçilen model test verisinde BİR KEZ değerlendirilir ve kaydedilir.
+   Karşılaştırma için aynı test oyuncularında iki eski sürüm de ölçülür:
+   ilk yaklaşım (Random Forest, log yok) ve ek özelliklerden önceki model (Gradient Boosting).
 
 Çalıştırma (proje klasöründen): python src/train_model.py   (~3-5 dk)
 """
@@ -31,23 +33,28 @@ from sklearn.linear_model import Ridge
 from sklearn.metrics import mean_absolute_error, mean_squared_error, median_absolute_error, r2_score
 from sklearn.model_selection import GridSearchCV, KFold, train_test_split
 from sklearn.pipeline import Pipeline
-from sklearn.preprocessing import OneHotEncoder, StandardScaler
+from sklearn.preprocessing import FunctionTransformer, OneHotEncoder, StandardScaler
 
 from paths import FIGURES_DIR, MODELS_DIR, PROCESSED_FILE, RANDOM_STATE, REPORTS_DIR
 
 TARGET = "market_value_in_eur"
 CATEGORICAL = ["position", "sub_position", "foot", "country_of_citizenship", "domestic_competition_id"]
-NUMERIC = [
+BASE_NUMERIC = [
     "age", "height_in_cm", "international_caps", "international_goals",
     "total_matches", "total_goals", "total_assists", "total_minutes",
     "total_yellow_cards", "total_red_cards",
     "goals_per_match", "assists_per_match", "minutes_per_match",
 ]
+# Ek özellikler (prepare_data.py adım 9-10): bir yıl önceki değer ve sözleşmenin bitmesine kalan yıl
+EXTRA_NUMERIC = ["value_1y_ago", "value_1y_ago_age_days", "contract_years_left"]
+NUMERIC = BASE_NUMERIC + EXTRA_NUMERIC
 
 
-def build_preprocessor():
+def build_preprocessor(numeric_columns=NUMERIC):
     numeric = Pipeline([
-        ("impute", SimpleImputer(strategy="median")),  # boy eksikse eğitim verisinin medyanı
+        # Eksikler eğitim verisinin medyanıyla doldurulur; add_indicator "bu değer eksikti"
+        # bilgisini ayrı bir sütun olarak saklar (ör. bir yıl önceki değeri olmayan oyuncu)
+        ("impute", SimpleImputer(strategy="median", add_indicator=True)),
         ("scale", StandardScaler()),                   # ağaçlar için gereksiz ama Ridge için şart
     ])
     categorical = Pipeline([
@@ -56,13 +63,23 @@ def build_preprocessor():
         ("onehot", OneHotEncoder(handle_unknown="infrequent_if_exist", min_frequency=100,
                                  sparse_output=False)),
     ])
-    return ColumnTransformer([("num", numeric, NUMERIC), ("cat", categorical, CATEGORICAL)])
+    # Euro cinsinden önceki değer çok çarpık: doğrusal model (Ridge) için log ölçeğine alınır.
+    # Ağaç modelleri sıralamaya baktığı için bu dönüşümden etkilenmez.
+    money = Pipeline([
+        ("log", FunctionTransformer(np.log1p, feature_names_out="one-to-one")),
+        ("impute", SimpleImputer(strategy="median", add_indicator=True)),
+        ("scale", StandardScaler()),
+    ])
+    money_columns = [c for c in numeric_columns if c == "value_1y_ago"]
+    other_columns = [c for c in numeric_columns if c not in money_columns]
+    return ColumnTransformer([("num", numeric, other_columns), ("money", money, money_columns),
+                              ("cat", categorical, CATEGORICAL)])
 
 
-def log_target(regressor):
+def log_target(regressor, numeric_columns=NUMERIC):
     """Modeli log1p(değer) üzerinde eğitir; predict() sonucu yine € cinsindendir."""
     return TransformedTargetRegressor(
-        regressor=Pipeline([("prep", build_preprocessor()), ("model", regressor)]),
+        regressor=Pipeline([("prep", build_preprocessor(numeric_columns)), ("model", regressor)]),
         func=np.log1p, inverse_func=np.expm1,
     )
 
@@ -71,7 +88,7 @@ def log_target(regressor):
 CANDIDATES = {
     "Ridge Regression (baseline)": (
         log_target(Ridge()),
-        {"regressor__model__alpha": [0.1, 1, 10, 100]},
+        {"regressor__model__alpha": [0.1, 1, 10, 100, 1000]},
     ),
     "Random Forest": (
         log_target(RandomForestRegressor(n_estimators=300, random_state=RANDOM_STATE, n_jobs=-1)),
@@ -95,6 +112,7 @@ def test_metrics(y_true, y_pred):
         "median_abs_error_eur": median_absolute_error(y_true, y_pred),
         "median_pct_error": float(np.median(ape)),
         "within_50pct": float(np.mean(ape <= 0.5)),
+        "off_by_2x_or_more": float(np.mean((y_pred / y_true < 0.5) | (y_pred / y_true > 2))),
     }
 
 
@@ -107,10 +125,15 @@ def main():
 
     cv = KFold(n_splits=5, shuffle=True, random_state=RANDOM_STATE)
 
-    # Eski yaklaşım (karşılaştırma için): log dönüşümü YOK, ayar araması YOK
-    old_rf = Pipeline([("prep", build_preprocessor()),
+    # Karşılaştırma 1 - ilk yaklaşım: ek özellik YOK, log dönüşümü YOK, ayar araması YOK
+    old_rf = Pipeline([("prep", build_preprocessor(BASE_NUMERIC)),
                        ("model", RandomForestRegressor(n_estimators=200, random_state=RANDOM_STATE, n_jobs=-1))])
     old_rf.fit(X_train, y_train)
+    # Karşılaştırma 2 - ek özelliklerden önceki model: log hedefli Gradient Boosting, ek özellik YOK
+    # (ayarlar, o sürümün CV ile seçtiği değerler: learning_rate=0.1, max_leaf_nodes=15)
+    previous_gb = log_target(HistGradientBoostingRegressor(max_iter=500, learning_rate=0.1, max_leaf_nodes=15,
+                                                           random_state=RANDOM_STATE), BASE_NUMERIC)
+    previous_gb.fit(X_train, y_train)
 
     results = {}
     for name, (model, grid) in CANDIDATES.items():
@@ -138,13 +161,14 @@ def main():
         "selected_model": best_name,
         "test": {
             "old_rf_raw_target": test_metrics(y_test, old_rf.predict(X_test)),
+            "previous_gb_without_extra_features": test_metrics(y_test, previous_gb.predict(X_test)),
             "selected_model": test_metrics(y_test, y_pred),
         },
     }
     for name, m in metrics["test"].items():
-        print(f"{name:20s} R²={m['r2']:.3f}  MAE={m['mae_eur']:>11,.0f} €  "
+        print(f"{name:35s} R²={m['r2']:.3f}  MAE={m['mae_eur']:>11,.0f} €  "
               f"MedAE={m['median_abs_error_eur']:>9,.0f} €  MedAPE={m['median_pct_error']:.1%}  "
-              f"±%50 içinde={m['within_50pct']:.1%}")
+              f"±%50 içinde={m['within_50pct']:.1%}  2x+ yanlış={m['off_by_2x_or_more']:.1%}")
 
     MODELS_DIR.mkdir(exist_ok=True)
     FIGURES_DIR.mkdir(parents=True, exist_ok=True)

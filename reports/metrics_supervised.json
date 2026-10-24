@@ -8,66 +8,80 @@
   },
   "cv_comparison": {
     "Ridge Regression (baseline)": {
-      "cv_mae_eur": 2685298.753425088,
-      "cv_mae_std": 145483.2215105992,
+      "cv_mae_eur": 1564314.939743785,
+      "cv_mae_std": 133270.87281992743,
       "best_params": {
-        "alpha": 0.1
+        "alpha": 100
       }
     },
     "Random Forest": {
-      "cv_mae_eur": 2173589.2740375604,
-      "cv_mae_std": 108443.51133024752,
+      "cv_mae_eur": 1471811.4843611005,
+      "cv_mae_std": 48662.780099801574,
       "best_params": {
         "max_features": 1.0,
         "min_samples_leaf": 1
       }
     },
     "Gradient Boosting": {
-      "cv_mae_eur": 1924524.3859250327,
-      "cv_mae_std": 87645.38867476865,
+      "cv_mae_eur": 1376172.0839686072,
+      "cv_mae_std": 62424.50223132079,
       "best_params": {
-        "learning_rate": 0.1,
-        "max_leaf_nodes": 15
+        "learning_rate": 0.03,
+        "max_leaf_nodes": 31
       }
     }
   },
   "selected_model": "Gradient Boosting",
   "test": {
     "old_rf_raw_target": {
-      "r2": 0.7013603493273171,
-      "mae_eur": 2125970.160387915,
-      "rmse_eur": 5081076.563572964,
-      "median_abs_error_eur": 630500.0,
-      "median_pct_error": 0.658453947368421,
-      "within_50pct": 0.4002237970906378
+      "r2": 0.7028501019629346,
+      "mae_eur": 2119817.7172696753,
+      "rmse_eur": 5068387.33944459,
+      "median_abs_error_eur": 636375.0,
+      "median_pct_error": 0.6527777777777778,
+      "within_50pct": 0.39835882133532263,
+      "off_by_2x_or_more": 0.46661693397985826
+    },
+    "previous_gb_without_extra_features": {
+      "r2": 0.6723191590826774,
+      "mae_eur": 1921132.369466307,
+      "rmse_eur": 5322400.231835238,
+      "median_abs_error_eur": 372352.91203991504,
+      "median_pct_error": 0.47408754160121463,
+      "within_50pct": 0.535994032077583,
+      "off_by_2x_or_more": 0.35695635956732563
     },
     "selected_model": {
-      "r2": 0.6920510845809392,
-      "mae_eur": 1883716.0213333757,
-      "rmse_eur": 5159663.084995615,
-      "median_abs_error_eur": 369997.2471096108,
-      "median_pct_error": 0.4717928675260818,
-      "within_50pct": 0.5315180902648265
+      "r2": 0.8333376778876257,
+      "mae_eur": 1367862.7211973337,
+      "rmse_eur": 3795777.253302576,
+      "median_abs_error_eur": 234918.6108412802,
+      "median_pct_error": 0.30484997403704833,
+      "within_50pct": 0.7086907870197687,
+      "off_by_2x_or_more": 0.18090264826557254
     }
   },
   "permutation_importance_mae_eur": {
-    "age": 3631224.0,
-    "total_minutes": 993068.0,
-    "domestic_competition_id": 697742.0,
-    "total_goals": 208603.0,
-    "international_caps": 187639.0,
-    "country_of_citizenship": 147242.0,
-    "total_matches": 139652.0,
-    "minutes_per_match": 135770.0,
-    "total_assists": 85869.0,
-    "goals_per_match": 61351.0,
-    "assists_per_match": 50193.0,
-    "sub_position": 13449.0,
-    "position": 12023.0,
-    "foot": 9593.0,
-    "height_in_cm": 7909.0,
-    "total_red_cards": 6188.0,
-    "international_goals": -287.0,
-    "total_yellow_cards": -3307.0
+    "value_1y_ago": 2815473.0,
+    "age": 674931.0,
+    "domestic_competition_id": 99093.0,
+    "minutes_per_match": 91012.0,
+    "total_minutes": 87730.0,
+    "contract_years_left": 82401.0,
+    "goals_per_match": 50905.0,
+    "value_1y_ago_age_days": 39484.0,
+    "assists_per_match": 25343.0,
+    "country_of_citizenship": 21138.0,
+    "total_matches": 15030.0,
+    "international_caps": 14715.0,
+    "sub_position": 7934.0,
+    "total_goals": 6352.0,
+    "height_in_cm": 3904.0,
+    "total_assists": 3882.0,
+    "position": 2855.0,
+    "total_red_cards": 2775.0,
+    "foot": 1819.0,
+    "international_goals": -592.0,
+    "total_yellow_cards": -3680.0
   }
 }
