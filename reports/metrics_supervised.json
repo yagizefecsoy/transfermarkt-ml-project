@@ -1,0 +1,73 @@
+{
+  "data": {
+    "players": 13405,
+    "train": 10724,
+    "test": 2681,
+    "target_median_eur": 800000.0,
+    "target_max_eur": 200000000.0
+  },
+  "cv_comparison": {
+    "Ridge Regression (baseline)": {
+      "cv_mae_eur": 2685298.753425088,
+      "cv_mae_std": 145483.2215105992,
+      "best_params": {
+        "alpha": 0.1
+      }
+    },
+    "Random Forest": {
+      "cv_mae_eur": 2173589.2740375604,
+      "cv_mae_std": 108443.51133024752,
+      "best_params": {
+        "max_features": 1.0,
+        "min_samples_leaf": 1
+      }
+    },
+    "Gradient Boosting": {
+      "cv_mae_eur": 1924524.3859250327,
+      "cv_mae_std": 87645.38867476865,
+      "best_params": {
+        "learning_rate": 0.1,
+        "max_leaf_nodes": 15
+      }
+    }
+  },
+  "selected_model": "Gradient Boosting",
+  "test": {
+    "old_rf_raw_target": {
+      "r2": 0.7013603493273171,
+      "mae_eur": 2125970.160387915,
+      "rmse_eur": 5081076.563572964,
+      "median_abs_error_eur": 630500.0,
+      "median_pct_error": 0.658453947368421,
+      "within_50pct": 0.4002237970906378
+    },
+    "selected_model": {
+      "r2": 0.6920510845809392,
+      "mae_eur": 1883716.0213333757,
+      "rmse_eur": 5159663.084995615,
+      "median_abs_error_eur": 369997.2471096108,
+      "median_pct_error": 0.4717928675260818,
+      "within_50pct": 0.5315180902648265
+    }
+  },
+  "permutation_importance_mae_eur": {
+    "age": 3631224.0,
+    "total_minutes": 993068.0,
+    "domestic_competition_id": 697742.0,
+    "total_goals": 208603.0,
+    "international_caps": 187639.0,
+    "country_of_citizenship": 147242.0,
+    "total_matches": 139652.0,
+    "minutes_per_match": 135770.0,
+    "total_assists": 85869.0,
+    "goals_per_match": 61351.0,
+    "assists_per_match": 50193.0,
+    "sub_position": 13449.0,
+    "position": 12023.0,
+    "foot": 9593.0,
+    "height_in_cm": 7909.0,
+    "total_red_cards": 6188.0,
+    "international_goals": -287.0,
+    "total_yellow_cards": -3307.0
+  }
+}

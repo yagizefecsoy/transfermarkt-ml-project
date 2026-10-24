@@ -1,0 +1,64 @@
+{
+  "features": [
+    "age",
+    "height_in_cm",
+    "international_caps",
+    "international_goals",
+    "total_matches",
+    "total_goals",
+    "total_assists",
+    "total_minutes",
+    "goals_per_match",
+    "minutes_per_match"
+  ],
+  "k_selection_rule": "K>=3 içinde en yüksek silhouette",
+  "k_scores": [
+    {
+      "k": 2,
+      "inertia": 97751.80633330577,
+      "silhouette": 0.45067627680990524
+    },
+    {
+      "k": 3,
+      "inertia": 83228.11686919897,
+      "silhouette": 0.32618494265754877
+    },
+    {
+      "k": 4,
+      "inertia": 72560.0355026082,
+      "silhouette": 0.2017555736170315
+    },
+    {
+      "k": 5,
+      "inertia": 66259.22698417485,
+      "silhouette": 0.2099051362858322
+    },
+    {
+      "k": 6,
+      "inertia": 60238.77103513525,
+      "silhouette": 0.21426353289312905
+    },
+    {
+      "k": 7,
+      "inertia": 55919.40567975979,
+      "silhouette": 0.20526820803841267
+    },
+    {
+      "k": 8,
+      "inertia": 52410.76750353307,
+      "silhouette": 0.2081829587728718
+    },
+    {
+      "k": 9,
+      "inertia": 49826.37499210485,
+      "silhouette": 0.21060136480181502
+    },
+    {
+      "k": 10,
+      "inertia": 47599.80642004955,
+      "silhouette": 0.21021904341858128
+    }
+  ],
+  "selected_k": 3,
+  "selected_silhouette": 0.32618494265754877
+}

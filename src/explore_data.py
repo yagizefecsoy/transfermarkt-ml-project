@@ -20,10 +20,12 @@ SONUÇ / KARARLAR:
 
 import pandas as pd
 
+from paths import raw_file
+
 # Ana tabloları oku
-players = pd.read_csv("../data/raw/players.csv")
-valuations = pd.read_csv("../data/raw/player_valuations.csv")
-appearances = pd.read_csv("../data/raw/appearances.csv")
+players = pd.read_csv(raw_file("players.csv"))
+valuations = pd.read_csv(raw_file("player_valuations.csv"))
+appearances = pd.read_csv(raw_file("appearances.csv"))
 
 # İlk bakış - her tablonun yapısını gör
 print("=== PLAYERS ===")

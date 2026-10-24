@@ -1,0 +1,4 @@
+cluster,players,age,total_matches,total_goals,goals_per_match,minutes_per_match,international_caps,median_market_value_eur,mean_market_value_eur
+0,3140,31.9,216.66,19.26,0.09,71.38,18.18,1400000.0,6163466.56
+1,9946,25.88,37.56,2.51,0.06,53.57,5.21,700000.0,2726359.84
+2,319,33.1,386.36,102.99,0.27,68.22,69.82,3500000.0,15249059.56

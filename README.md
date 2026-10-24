@@ -1,132 +1,171 @@
 # Transfermarkt ML Project
 
-Transfermarkt verisi kullanılarak futbol oyuncularının piyasa değerini tahmin eden (supervised) ve oyuncuları özelliklerine göre gruplara ayıran (unsupervised) makine öğrenmesi modelleri.
+Transfermarkt verisiyle futbolcuların piyasa değerini tahmin eden bir **denetimli (supervised)** model ve oyuncuları özelliklerine göre gruplara ayıran bir **denetimsiz (unsupervised)** model.
+
+**Sonuç:**
+- **Piyasa değeri tahmini (Gradient Boosting):** Test verisindeki oyuncuların yarısında hata **370 bin €'nun** altında kaldı. Oyuncuların **%53'ünde** tahmin, gerçek değerin ±%50'si içinde.
+- **Oyuncu kümeleme (K-Means, K=3):** Kümeleme piyasa değerini hiç kullanmadı. Buna rağmen üç kümenin medyan değerleri belirgin biçimde ayrıştı: 0,7M €, 1,4M € ve 3,5M €.
 
 ---
 
-## Proje Yapısı
+## 1. Veri seti
+
+Kaynak: [Transfermarkt veri seti (Kaggle, davidcariboo/player-scores)](https://www.kaggle.com/datasets/davidcariboo/player-scores). Kullanılan tablolar: `players.csv`, `appearances.csv` ve `clubs.csv`. Maç kayıtları 2012-07 ile 2026-06 arasını kapsıyor.
+
+| Adım | Oyuncu |
+|---|---:|
+| Ham `players.csv` | 50.149 |
+| Aktif oyuncular (`last_season >= 2023`) | 30.459 |
+| Maç kaydı olanlar | 15.116 |
+| Piyasa değeri bilinenler | 14.110 |
+| Yaş, mevki ve lig bilgisi geçerli olanlar | **13.405** |
+
+**Hedef değişken:** `market_value_in_eur`. Dağılım çok çarpık: medyan 0,8M €, en yüksek 200M €.
+
+## 2. Özellikler
+
+| Grup | Özellikler |
+|---|---|
+| Kişisel | `age`, `height_in_cm`, `foot`, `country_of_citizenship` |
+| Mevki ve lig | `position`, `sub_position`, `domestic_competition_id` |
+| Milli takım | `international_caps`, `international_goals` |
+| Kariyer toplamları (`appearances.csv`) | `total_matches`, `total_goals`, `total_assists`, `total_minutes`, `total_yellow_cards`, `total_red_cards` |
+| Oranlar | `goals_per_match`, `assists_per_match`, `minutes_per_match` |
+
+`highest_market_value_in_eur` bilerek kullanılmadı. Hedefle çok yakından bağlantılı olduğu için kullanılsaydı model "kopya çekmiş" olurdu.
+
+---
+
+## 3. Supervised: piyasa değeri tahmini
+
+### Yöntem
+1. **%80 eğitim / %20 test ayrımı.** Test verisi en sona kadar hiç kullanılmadı.
+2. **Ön işleme pipeline'ın içinde:** Eksik boy medyanla dolduruluyor. 100'den az oyuncusu olan ülke ve ligler tek bir "diğer" sütununda toplanıyor. Ardından one-hot encoding yapılıyor. Bu adımların hepsi sadece eğitim verisinden öğreniliyor, böylece test verisinden bilgi sızmıyor.
+3. **Log hedef:** Model `log(1 + değer)` üzerinde eğitiliyor, tahminler tekrar €'ya çevriliyor. Bu sayede 200M €'luk birkaç yıldız, 500 bin €'luk binlerce oyuncunun hatasını bastırmıyor.
+4. **Model seçimi:** Üç model 5 katlı çapraz doğrulama ve ayar aramasıyla karşılaştırıldı. Seçim ölçütü € cinsinden ortalama mutlak hata (MAE).
+
+### Model karşılaştırması (5 katlı CV, eğitim verisi)
+
+| Model | En iyi ayarlar | CV MAE |
+|---|---|---:|
+| Ridge Regression (baseline) | alpha=0.1 | 2.685.299 € ± 145.483 |
+| Random Forest | min_samples_leaf=1, max_features=1.0 | 2.173.589 € ± 108.444 |
+| **Gradient Boosting** ✅ | learning_rate=0.1, max_leaf_nodes=15 | **1.924.524 € ± 87.645** |
+
+### Test sonuçları (2.681 oyuncu)
+
+| Ölçüt | Anlamı | Eski yaklaşım (RF, log yok) | **Seçilen model** |
+|---|---|---:|---:|
+| Medyan mutlak hata | Oyuncuların yarısında hata bundan küçük | 630.500 € | **369.997 €** |
+| Medyan yüzde hata | Tipik oyuncuda hata, değerinin yüzde kaçı? | %65,8 | **%47,2** |
+| ±%50 içinde | Tahmini gerçeğe yeterince yakın olanların oranı | %40,0 | **%53,2** |
+| MAE | Ortalama mutlak hata | 2.125.970 € | **1.883.716 €** |
+| R² | Varyansın ne kadarı açıklanıyor? | 0,701 | 0,692 |
+
+İki satır aynı veri hazırlığı ve aynı test oyuncularıyla hesaplandı.
+
+**R² neden biraz düştü?** R², büyük hataların karesine baktığı için birkaç pahalı yıldızın etkisine çok duyarlı. Log dönüşümü modeli bütün oyuncular için dengeli hale getiriyor. Bu yüzden R² yaklaşık 0,01 düşerken tipik oyuncu için hata %41 azaldı. Proje ilk geliştirilirken log dönüşümü sadece R²'ye bakılarak geri alınmıştı. Diğer ölçütler kontrol edilince bu kararın yanlış olduğu görüldü.
+
+![Gerçek vs tahmin](reports/figures/gercek_vs_tahmin.png)
+
+### Hangi özellikler önemli?
+
+Permutation importance yöntemiyle ölçüldü: bir özellik karıştırıldığında hatanın ne kadar arttığına bakılıyor. En önemli üç özellik **yaş**, **toplam dakika** ve **lig**. Ayak tercihi, boy ve kart sayıları neredeyse hiç katkı vermiyor.
+
+![Özellik önemi](reports/figures/ozellik_onemi.png)
+
+---
+
+## 4. Unsupervised: oyuncu kümeleme
+
+### Yöntem
+- **Özellikler:** Yaş, boy, milli maç/gol, kariyer maç/gol/asist/dakika, maç başına gol ve dakika. Kategorik sütunlar mesafe hesabını bozacağı için kullanılmadı.
+- Özellikler `StandardScaler` ile ölçeklendi. K-Means mesafeye dayandığı için bu adım şart.
+- **K seçimi:** K=2…10 arası denendi ve her biri için silhouette skoru hesaplandı. En yüksek skor K=2'de (0,451), ama iki küme yalnızca "çok oynayan / az oynayan" ayrımı veriyor. Bu yüzden K≥3 arasında en yüksek skora sahip olan **K=3** (0,326) seçildi. K=4 ve üzerinde skor 0,20–0,21'e düşüyor. Önceki sürümde göz kararı seçilen K=5'in skoru 0,210'du.
+
+![K seçimi](reports/figures/k_secimi.png)
+
+### Kümeler
+
+| Küme | Oyuncu | Ort. yaş | Ort. maç | Ort. gol | Ort. milli maç | Medyan değer | Yorum |
+|---|---:|---:|---:|---:|---:|---:|---|
+| 1 | 9.946 | 25,9 | 38 | 2,5 | 5 | 0,7M € | Genç / az deneyimli |
+| 0 | 3.140 | 31,9 | 217 | 19 | 18 | 1,4M € | Deneyimli, düzenli oynayan |
+| 2 | 319 | 33,1 | 386 | 103 | 70 | 3,5M € | Kariyerli yıldızlar ve golcüler, milli takım oyuncuları |
+
+![Kümeler](reports/figures/kumeler_pca.png)
+
+**Yorum:** Kümeleme piyasa değerini görmedi, ama değer kümeler arasında sıralı olarak artıyor. Yani bulunan gruplar anlamlı. Yine de silhouette skoru 0,33 seviyesinde, kümeler net biçimde ayrışmıyor. Oyuncular kesin gruplardan çok "az deneyimliden çok deneyimliye" uzanan bir süreklilik üzerinde dağılıyor. Bu durum PCA grafiğinde de görülüyor.
+
+---
+
+## 5. Geliştirme sürecinde düzeltilenler
+
+| Önceki durum | Sorun | Düzeltme |
+|---|---|---|
+| `python src/...` komutu proje klasöründen çalışmıyordu | Kod `../data` yolunu kullanıyordu | Yollar `src/paths.py` dosyasında, proje köküne göre tanımlandı |
+| Yaş "bugün"e göre hesaplanıyordu | Her çalıştırmada sonuçlar değişiyordu | Yaş, veri setindeki son maç tarihine (2026-06-28) göre sabitlendi |
+| Medyanla doldurma, ülke gruplama ve one-hot işlemleri bölmeden önce tüm veride yapılıyordu | Test verisi ön işlemeyi etkiliyordu (veri sızıntısı) | Bu adımlar pipeline'a taşındı ve sadece eğitim verisinden öğreniliyor |
+| Log dönüşümü sadece R²'ye bakılarak geri alınmıştı | Tipik oyuncu için hata daha büyük kalıyordu | Log hedef geri getirildi, tüm ölçütler birlikte raporlanıyor |
+| Tek bölme, ayar araması yoktu | Model seçimi şansa bağlıydı | 5 katlı CV ve 3 model karşılaştırması eklendi |
+| K=5 göz kararı seçilmişti | Seçim gerekçesiz kalıyordu | K, silhouette skoruna göre belirli bir kuralla seçiliyor |
+| Model kaydedilmiyordu, sonuçlar sadece terminale yazılıyordu | Tekrar üretilebilir değildi | Modeller `models/`, sonuçlar ve grafikler `reports/` klasörüne kaydediliyor |
+
+## 6. Kurulum ve çalıştırma
+
+Python 3.10 veya üzeri gerekir.
+
+```bash
+git clone https://github.com/yagizefecsoy/transfermarkt-ml-project.git
+cd transfermarkt-ml-project
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1        # Windows PowerShell
+# source .venv/bin/activate         # macOS / Linux
+pip install -r requirements.txt
+```
+
+Temizlenmiş veri (`data/processed/players_cleaned.csv`) repoda bulunuyor. Doğrudan eğitime geçebilirsiniz:
+
+```bash
+python src/train_model.py       # supervised (~2-3 dk)
+python src/cluster_players.py   # unsupervised (~1 dk)
+```
+
+Veri hazırlığını sıfırdan çalıştırmak için önce Kaggle'dan veri setini indirip CSV dosyalarını `data/raw/` klasörüne koyun:
+
+```bash
+python src/explore_data.py      # ham verilere ilk bakış
+python src/prepare_data.py      # temizleme -> data/processed/players_cleaned.csv
+```
+
+Tüm rastgelelikler `random_state=42` ile sabitlendi.
+
+## 7. Proje yapısı
 
 ```
 transfermarkt-ml-project/
 ├── data/
-│   ├── raw/               ← Ham veri (gitignore'da, repoya dahil değil)
-│   └── processed/         ← Temizlenmiş ve işlenmiş veri
+│   ├── raw/                     # Kaggle CSV'leri (repoda yok, ~900 MB)
+│   └── processed/players_cleaned.csv
 ├── src/
-│   ├── explore_data.py    ← Ham verilerin ilk incelenmesi
-│   ├── prepare_data.py    ← Veri temizleme, birleştirme, feature engineering
-│   ├── train_model.py     ← Supervised model eğitimi (regresyon)
-│   └── cluster_players.py ← Unsupervised model (kümeleme)
-└── models/                ← Eğitilmiş modeller (henüz boş)
+│   ├── paths.py                 # klasör yolları, sabitler
+│   ├── explore_data.py          # ham verilere ilk bakış
+│   ├── prepare_data.py          # birleştirme, temizleme, özellik çıkarma
+│   ├── train_model.py           # supervised: model karşılaştırma, test, kaydetme
+│   └── cluster_players.py       # unsupervised: K seçimi, kümeleme
+├── models/                      # market_value_model.joblib, player_clusters.joblib
+├── reports/
+│   ├── metrics_supervised.json
+│   ├── metrics_clustering.json
+│   ├── cluster_summary.csv
+│   └── figures/
+└── requirements.txt
 ```
 
----
+## 8. Sınırlar
 
-## Veri Seti
-
-Kaynak: [Transfermarkt Kaggle Dataset](https://www.kaggle.com/)
-
-Kullanılan tablolar:
-- `players.csv` → Oyuncu demografik bilgileri ve piyasa değeri
-- `appearances.csv` → Maç bazlı performans istatistikleri
-- `clubs.csv` → Kulüp ve lig bilgileri
-
-Ham veri boyutu: ~50.000 oyuncu
-Temizleme sonrası: **13.406 aktif oyuncu** (last_season ≥ 2023 filtresi)
-
----
-
-## Kullanılan Özellikler
-
-| Özellik | Açıklama |
-|---|---|
-| age | Oyuncunun yaşı (date_of_birth'ten hesaplandı) |
-| height_in_cm | Boy |
-| foot | Baskın ayak (sol/sağ/çift) |
-| position / sub_position | Pozisyon bilgisi |
-| international_caps | Milli takım maç sayısı |
-| international_goals | Milli takım gol sayısı |
-| total_matches | Kariyer boyunca toplam maç |
-| total_goals | Kariyer boyunca toplam gol |
-| total_assists | Kariyer boyunca toplam asist |
-| total_minutes | Kariyer boyunca toplam dakika |
-| goals_per_match | Maç başına gol oranı |
-| minutes_per_match | Maç başına ortalama dakika |
-| domestic_competition_id | Oynadığı lig |
-| country_of_citizenship | Milliyet |
-
-**Hedef değişken:** `market_value_in_eur` (€ cinsinden piyasa değeri)
-
----
-
-## Supervised Model: Piyasa Değeri Tahmini
-
-**Problem:** Regresyon (sürekli sayısal değer tahmini)
-
-**Modeller ve Sonuçlar:**
-
-| Model | R² | MAE | RMSE |
-|---|---|---|---|
-| Lineer Regresyon (baseline) | 0.34 | 4.086.186 € | 6.971.090 € |
-| Random Forest | **0.62** | **2.245.246 €** | **5.306.288 €** |
-
-**Notlar:**
-- Lineer Regresyon baseline olarak kullanıldı — yaş-değer ilişkisinin doğrusal olmaması nedeniyle düşük performans beklenen bir sonuç.
-- Log dönüşümü (np.log1p) denendi ama Random Forest için R²'yi düşürdüğü (0.62 → 0.57) için geri alındı.
-- R²=0.62 bu problem tipi için makul bir sonuç — piyasa değeri kısmen insan kararına dayandığı için %90+ skor beklentisi gerçekçi değil.
-
----
-
-## Unsupervised Model: Oyuncu Segmentasyonu
-
-**Problem:** K-Means kümeleme (K=5)
-
-**Elbow Method ile K seçimi:** K=4-5 aralığında dirsek noktası gözlemlendi, K=5 seçildi.
-
-**Küme Sonuçları:**
-
-| Küme | Oyuncu Sayısı | Ort. Yaş | Ort. Değer | Yorum |
-|---|---|---|---|---|
-| 4 | 197 | 33.5 | 14.9M € | Deneyimli yıldızlar |
-| 0 | 1708 | 32.5 | 7.4M € | Tecrübeli, düzenli oynayan |
-| 1 | 2472 | 27.6 | 5.6M € | Orta yaş, orta seviye |
-| 2 | 4618 | 28.2 | 3.0M € | Uzun boylu, düzenli oynayan |
-| 3 | 4411 | 23.6 | 1.8M € | Genç, az oynayan (potansiyel) |
-
-**Silhouette Score:** 0.2145
-
-Model piyasa değerini hiç görmeden gruplar oluşturdu — ama gruplar arasında 1.8M € ile 14.9M € arasında net bir değer farklılaşması ortaya çıktı. Bu, kümelerin gerçek hayatta anlamlı karşılığı olduğunun göstergesi.
-
----
-
-## Kurulum ve Çalıştırma
-
-```bash
-# Repoyu klonla
-git clone https://github.com/yagizefecsoy/transfermarkt-ml-project.git
-cd transfermarkt-ml-project
-
-# Virtual environment oluştur
-python -m venv venv
-venv\Scripts\activate  # Windows
-source venv/bin/activate  # Mac/Linux
-
-# Kütüphaneleri kur
-pip install pandas numpy scikit-learn matplotlib seaborn
-
-# Scriptleri sırayla çalıştır
-python src/explore_data.py
-python src/prepare_data.py
-python src/train_model.py
-python src/cluster_players.py
-```
-
-**Not:** `data/raw/` klasörüne Transfermarkt veri setini manuel olarak eklemeniz gerekir (boyutu nedeniyle repoya dahil edilmedi).
-
----
-
-## Teknolojiler
-
-- Python 3.10+
-- pandas, numpy
-- scikit-learn
-- Git / GitHub
+- **Piyasa değeri insan değerlendirmesidir.** Transfermarkt değerleri; sözleşme süresi, sakatlık, menajer ve medya ilgisi gibi bu veride olmayan etkenleri de yansıtır. Bu yüzden mükemmel bir tahmin beklenmemeli.
+- **Kariyer toplamları kullanıldı.** Son sezon formu ayrıca ölçülmedi. Formu yükselen genç bir oyuncunun değeri olduğundan düşük tahmin edilebilir.
+- **Eksik maç verisi.** `appearances.csv` her ligi kapsamıyor. Maç kaydı olmayan aktif oyuncular modelden çıkarıldı.
+- **Tek zaman noktası.** Değerlerin zaman içindeki değişimi (`player_valuations.csv`) kullanılmadı.
+- **Kümeler zayıf ayrışıyor.** Silhouette skoru 0,33. Kümeler kesin oyuncu tiplerini değil, deneyim ekseni üzerindeki kabaca bölgeleri temsil ediyor.

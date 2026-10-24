@@ -1,165 +1,100 @@
 """
 AMAÇ: appearances verisini oyuncu bazında toplayıp players tablosuyla birleştirmek,
-sonra eksik verileri (performans yok / hedef değer yok) temizlemek.
+sonra eksik/hatalı kayıtları temizlemek.
+
+ÖNEMLİ: Burada yalnızca SATIR BAZINDA işlemler yapılır (filtreleme, birleştirme, oran hesaplama).
+Veri setinin geneline bakarak öğrenilen adımlar (medyanla doldurma, nadir ülkeleri "Other" yapma,
+one-hot encoding) train_model.py içindeki pipeline'da, eğitim/test ayrımından SONRA yapılır.
+Böylece test verisi bu adımları etkilemez (veri sızıntısı olmaz).
+
+Çalıştırma (proje klasöründen): python src/prepare_data.py
 """
 
 import pandas as pd
 
-# Verileri oku
-players = pd.read_csv("../data/raw/players.csv")
-appearances = pd.read_csv("../data/raw/appearances.csv")
+from paths import PROCESSED_FILE, raw_file
 
-# last_season sütununu incele
-print("last_season değerleri:", players["last_season"].unique())
-print("last_season min/max:", players["last_season"].min(), players["last_season"].max())
+ACTIVE_SINCE_SEASON = 2023  # son 3 sezonda oynamış oyuncular
+MIN_AGE, MAX_AGE = 16, 45
 
-# last_season sütununu incele
-print("last_season değerleri:", players["last_season"].unique())
-print("last_season min/max:", players["last_season"].min(), players["last_season"].max())
 
-# 0. Sadece güncel/aktif oyuncuları tut (son 2 sezon içinde oynamış olanlar)
-before = players.shape[0]
-players = players[players["last_season"] >= 2023]
-after = players.shape[0]
-print(f"\nAktif oyuncu filtresi: {before} -> {after} satır ({before - after} satır silindi)")
+def main():
+    players = pd.read_csv(raw_file("players.csv"))
+    appearances = pd.read_csv(raw_file("appearances.csv"))
+    clubs = pd.read_csv(raw_file("clubs.csv"))
 
-# 1. Appearances'ı oyuncu bazında grupla (her oyuncu için toplamlar)
-performance = appearances.groupby("player_id").agg(
-    total_matches=("appearance_id", "count"),
-    total_goals=("goals", "sum"),
-    total_assists=("assists", "sum"),
-    total_minutes=("minutes_played", "sum"),
-    total_yellow_cards=("yellow_cards", "sum"),
-    total_red_cards=("red_cards", "sum")
-).reset_index()
+    # Yaş için sabit referans tarihi: veri setindeki son maç tarihi.
+    # "Bugün" kullanılsaydı script her çalıştırıldığında yaşlar (ve sonuçlar) değişirdi.
+    appearances["date"] = pd.to_datetime(appearances["date"])
+    reference_date = appearances["date"].max()
+    print("Yaş referans tarihi (son maç tarihi):", reference_date.date())
 
-print("=== PERFORMANCE (gruplanmış) ===")
-print(performance.shape)
-print(performance.head())
+    # 0. Sadece güncel/aktif oyuncuları tut
+    before = players.shape[0]
+    players = players[players["last_season"] >= ACTIVE_SINCE_SEASON]
+    print(f"Aktif oyuncu filtresi: {before} -> {players.shape[0]} satır")
 
-# 2. Players ile performance'ı birleştir
-df = players.merge(performance, on="player_id", how="left")
+    # 1. Appearances'ı oyuncu bazında grupla (her oyuncu için kariyer toplamları)
+    performance = appearances.groupby("player_id").agg(
+        total_matches=("appearance_id", "count"),
+        total_goals=("goals", "sum"),
+        total_assists=("assists", "sum"),
+        total_minutes=("minutes_played", "sum"),
+        total_yellow_cards=("yellow_cards", "sum"),
+        total_red_cards=("red_cards", "sum"),
+    ).reset_index()
 
-print("\n=== BİRLEŞTİRİLMİŞ VERİ ===")
-print(df.shape)
-print(df.columns.tolist())
+    # 2. Players ile performance'ı birleştir; performans verisi olmayanları çıkar
+    df = players.merge(performance, on="player_id", how="inner")
+    print("Performans verisi olan aktif oyuncu:", df.shape[0])
 
-# 3. Kaç oyuncunun performans verisi eksik (appearances'ta hiç kaydı yok)?
-print("\nPerformans verisi olmayan oyuncu sayısı:", df["total_matches"].isnull().sum())
+    # 3. Hedef değişkeni (market_value_in_eur) eksik olanları çıkar
+    df = df.dropna(subset=["market_value_in_eur"])
+    print("Hedef değeri olan oyuncu:", df.shape[0])
 
-# 4. Performans verisi olmayan oyuncuları sil (hedefimiz performansa dayalı tahmin)
-df = df.dropna(subset=["total_matches"])
+    # 4. Kulübün ligini ekle
+    clubs_selected = clubs[["club_id", "domestic_competition_id"]]
+    df = df.merge(clubs_selected, left_on="current_club_id", right_on="club_id", how="left")
 
-print("\n=== PERFORMANS VERİSİ OLMAYANLAR SİLİNDİKTEN SONRA ===")
-print(df.shape)
+    # 5. Performans oranları (ham toplamlardan daha anlamlı sinyal)
+    df["goals_per_match"] = df["total_goals"] / df["total_matches"]
+    df["assists_per_match"] = df["total_assists"] / df["total_matches"]
+    df["minutes_per_match"] = df["total_minutes"] / df["total_matches"]
 
-# 5. Hedef değişkeni (market_value_in_eur) eksik olanları kontrol et
-print("\nHedef değişkeni eksik olan oyuncu sayısı:", df["market_value_in_eur"].isnull().sum())
+    # 6. Yaş (sabit referans tarihine göre, tam yıl)
+    birth = pd.to_datetime(df["date_of_birth"])
+    df["age"] = (reference_date - birth).dt.days / 365.25
 
-# 6. Hedef değişkeni eksik olanları sil
-df = df.dropna(subset=["market_value_in_eur"])
+    before = df.shape[0]
+    df = df[df["age"].between(MIN_AGE, MAX_AGE)]  # doğum tarihi eksik/hatalı olanlar da düşer
+    print(f"Yaş filtresi ({MIN_AGE}-{MAX_AGE}): {before} -> {df.shape[0]} satır")
 
-print("\n=== HEDEF DEĞERİ EKSİK OLANLAR SİLİNDİKTEN SONRA ===")
-print(df.shape)
+    # 7. Kategorik alanı olmayan az sayıdaki kaydı çıkar
+    df = df.dropna(subset=["sub_position", "domestic_competition_id"])
 
-# 6.5. Kulüp bilgisini ekle (sadece lig - en güvenilir kulüp gücü göstergesi)
-clubs = pd.read_csv("../data/raw/clubs.csv")
+    # 8. Milli takım bilgisi boşsa oyuncu milli takımda oynamamıştır -> 0 (satır bazında, sızıntı yok)
+    df["international_caps"] = df["international_caps"].fillna(0)
+    df["international_goals"] = df["international_goals"].fillna(0)
+    # height_in_cm ve foot eksikleri burada doldurulmaz: pipeline eğitim verisine göre doldurur.
 
-clubs_selected = clubs[["club_id", "domestic_competition_id"]]
+    columns_to_keep = [
+        "player_id", "market_value_in_eur",
+        "age", "height_in_cm", "foot",
+        "position", "sub_position", "country_of_citizenship", "domestic_competition_id",
+        "international_caps", "international_goals",
+        "total_matches", "total_goals", "total_assists", "total_minutes",
+        "total_yellow_cards", "total_red_cards",
+        "goals_per_match", "assists_per_match", "minutes_per_match",
+    ]
+    df = df[columns_to_keep].sort_values("player_id").reset_index(drop=True)
 
-df = df.merge(clubs_selected, left_on="current_club_id", right_on="club_id", how="left")
+    print("\nEksik değerler (pipeline dolduracak):")
+    print(df.isnull().sum()[lambda s: s > 0])
 
-print("\n=== KULÜP BİLGİSİ EKLENDİKTEN SONRA ===")
-print(df.shape)
+    PROCESSED_FILE.parent.mkdir(parents=True, exist_ok=True)
+    df.to_csv(PROCESSED_FILE, index=False)
+    print(f"\nTemizlenmiş veri: {df.shape[0]} oyuncu, {df.shape[1]} sütun -> {PROCESSED_FILE.name}")
 
-# 7. Performans oranlarını türet (ham toplamlardan daha anlamlı sinyal)
-df["goals_per_match"] = df["total_goals"] / df["total_matches"]
-df["minutes_per_match"] = df["total_minutes"] / df["total_matches"]
 
-# 8. Gereksiz sütunları çıkar (kimlik bilgisi, metin, veri sızıntısı riski taşıyanlar)
-columns_to_keep = [
-    "player_id", "country_of_citizenship", "date_of_birth",
-    "sub_position", "position", "foot", "height_in_cm",
-    "international_caps", "international_goals",
-    "domestic_competition_id",
-    "market_value_in_eur",
-    "total_matches", "total_goals", "total_assists",
-    "total_minutes", "total_yellow_cards", "total_red_cards",
-    "goals_per_match", "minutes_per_match"
-]
-df = df[columns_to_keep]
-
-print("\n=== SADECE GEREKLİ SÜTUNLAR ===")
-print(df.shape)
-print(df.columns.tolist())
-print(df.head())
-
-# 9. Doğum tarihinden yaş hesapla
-df["date_of_birth"] = pd.to_datetime(df["date_of_birth"])
-today = pd.Timestamp("today")
-df["age"] = (today - df["date_of_birth"]).dt.days // 365
-
-# date_of_birth artık gereksiz, yaşı hesapladık
-df = df.drop(columns=["date_of_birth"])
-
-print("\n=== YAŞ EKLENDİKTEN SONRA ===")
-print(df[["age"]].describe())
-
-# Yaş NaN olanları kontrol et
-print("\nYaş hesaplanamayan satır sayısı:", df["age"].isnull().sum())
-
-# Şüpheli yüksek yaşları kontrol et (örn. 45 üstü kaç kişi var?)
-print("45 yaş üstü oyuncu sayısı:", (df["age"] > 45).sum())
-print(df[df["age"] > 45][["age", "market_value_in_eur"]].head(10))
-
-# 10. Gerçekçi olmayan yaşları filtrele (muhtemelen hatalı/eski kayıtlar)
-before = df.shape[0]
-df = df[(df["age"] >= 16) & (df["age"] <= 45)]
-after = df.shape[0]
-
-print(f"\nYaş filtresi sonrası: {before} -> {after} satır ({before - after} satır silindi)")
-print(df["age"].describe())
-
-# 11. Tüm sütunlarda eksik değer var mı kontrol et
-print("\n=== EKSİK DEĞER KONTROLÜ ===")
-print(df.isnull().sum())
-
-# 12. Eksik değerleri doldur/temizle
-df = df.dropna(subset=["sub_position", "domestic_competition_id"])  # az sayıda, direkt sil
-
-df["foot"] = df["foot"].fillna("Unknown")  # kategorik, "bilinmiyor" olarak işaretle
-df["height_in_cm"] = df["height_in_cm"].fillna(df["height_in_cm"].median())  # medyan ile doldur
-df["international_caps"] = df["international_caps"].fillna(0)  # hiç çağrılmamış = 0
-df["international_goals"] = df["international_goals"].fillna(0)  # hiç çağrılmamış = 0
-
-print("\n=== EKSİK DEĞER TEMİZLİĞİ SONRASI ===")
-print(df.shape)
-print(df.isnull().sum())
-
-print("\nFarklı ülke sayısı:", df["country_of_citizenship"].nunique())
-print("Farklı pozisyon sayısı:", df["position"].nunique())
-print("Farklı alt pozisyon sayısı:", df["sub_position"].nunique())
-print("Farklı lig sayısı:", df["domestic_competition_id"].nunique())
-
-# 13. country_of_citizenship: en az 100 oyuncusu olan ülkeleri tut, gerisini "Other" yap
-country_counts = df["country_of_citizenship"].value_counts()
-countries_to_keep = country_counts[country_counts >= 100].index
-
-df["country_of_citizenship"] = df["country_of_citizenship"].apply(
-    lambda x: x if x in countries_to_keep else "Other"
-)
-
-print("\nGruplama sonrası ülke sayısı:", df["country_of_citizenship"].nunique())
-print(df["country_of_citizenship"].value_counts())
-
-# 14. Kategorik sütunları one-hot encoding ile sayısala çevir
-categorical_columns = ["country_of_citizenship", "position", "sub_position", "foot", "domestic_competition_id"]
-df = pd.get_dummies(df, columns=categorical_columns, drop_first=True)
-
-print("\n=== ONE-HOT ENCODING SONRASI ===")
-print(df.shape)
-print(df.columns.tolist())
-
-# 15. Temizlenmiş veriyi kaydet
-df.to_csv("../data/processed/players_cleaned.csv", index=False)
-print("\nTemizlenmiş veri kaydedildi: data/processed/players_cleaned.csv")
+if __name__ == "__main__":
+    main()
