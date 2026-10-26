@@ -156,6 +156,14 @@ Permutation importance yöntemiyle ölçüldü: bir özellik karıştırıldığ
 | Model kaydedilmiyordu, sonuçlar sadece terminale yazılıyordu | Tekrar üretilebilir değildi | Modeller `models/`, sonuçlar ve grafikler `reports/` klasörüne kaydediliyor |
 | Model sadece kariyer istatistiklerine bakıyordu | Değeri düşmüş veya verisi eksik oyuncularda büyük hatalar | Bir yıl önceki değer ve sözleşme süresi eklendi (bölüm 4) |
 
+## Teslim dosyaları (Assignment 1)
+
+| Dosya | İçerik |
+|---|---|
+| [docs/2_Futbol_Deger_Gradient_Boosting.pptx](docs/2_Futbol_Deger_Gradient_Boosting.pptx) | Sunum: Gradient Boosting ile piyasa değeri tahmini |
+| [docs/3_Futbol_Kumeleme_KMeans.pptx](docs/3_Futbol_Kumeleme_KMeans.pptx) | Sunum: K-Means ile oyuncu segmentasyonu |
+| [docs/Proje_Raporu.pdf](docs/Proje_Raporu.pdf) | Süreci anlatan proje raporu (SMS Spam + Futbol projeleri) |
+
 ## 7. Kurulum ve çalıştırma
 
 Python 3.10 veya üzeri gerekir.
