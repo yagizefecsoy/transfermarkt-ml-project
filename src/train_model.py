@@ -31,7 +31,7 @@ from sklearn.impute import SimpleImputer
 from sklearn.inspection import permutation_importance
 from sklearn.linear_model import Ridge
 from sklearn.metrics import mean_absolute_error, mean_squared_error, median_absolute_error, r2_score
-from sklearn.model_selection import GridSearchCV, KFold, train_test_split
+from sklearn.model_selection import GridSearchCV, KFold, learning_curve, train_test_split
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import FunctionTransformer, OneHotEncoder, StandardScaler
 
@@ -108,6 +108,7 @@ def test_metrics(y_true, y_pred):
     return {
         "r2": r2_score(y_true, y_pred),
         "mae_eur": mean_absolute_error(y_true, y_pred),
+        "mse_eur2": float(mean_squared_error(y_true, y_pred)),
         "rmse_eur": float(np.sqrt(mean_squared_error(y_true, y_pred))),
         "median_abs_error_eur": median_absolute_error(y_true, y_pred),
         "median_pct_error": float(np.median(ape)),
@@ -197,6 +198,25 @@ def main():
     fig.tight_layout()
     fig.savefig(FIGURES_DIR / "ozellik_onemi.png", dpi=150)
     plt.close(fig)
+
+    # Grafik 3: öğrenme eğrisi. Eğitim verisi büyüdükçe eğitim ve doğrulama hatası (MAE) nasıl değişiyor?
+    # Doğrulama hatası hâlâ düşüyorsa daha fazla veri işe yarar; iki eğri arasındaki açıklık ezberlemeyi gösterir.
+    sizes, train_scores, val_scores = learning_curve(
+        best_model, X_train, y_train, cv=KFold(n_splits=5, shuffle=True, random_state=RANDOM_STATE),
+        scoring="neg_mean_absolute_error", train_sizes=np.linspace(0.1, 1.0, 6), n_jobs=-1)
+    train_mae, val_mae = -train_scores / 1e6, -val_scores / 1e6
+    fig, ax = plt.subplots(figsize=(5.5, 4))
+    for score, label, color in [(train_mae, "Eğitim", "#4C78A8"), (val_mae, "Doğrulama (CV)", "#E45756")]:
+        ax.plot(sizes, score.mean(axis=1), "o-", color=color, label=label)
+        ax.fill_between(sizes, score.mean(axis=1) - score.std(axis=1), score.mean(axis=1) + score.std(axis=1),
+                        color=color, alpha=0.15)
+    ax.set(xlabel="Eğitimdeki oyuncu sayısı", ylabel="MAE (milyon €)", title=f"Öğrenme eğrisi: {best_name}")
+    ax.legend()
+    fig.tight_layout()
+    fig.savefig(FIGURES_DIR / "ogrenme_egrisi.png", dpi=150)
+    plt.close(fig)
+    metrics["learning_curve"] = {"train_size": sizes.tolist(), "train_mae_eur": (train_mae.mean(axis=1) * 1e6).tolist(),
+                                 "validation_mae_eur": (val_mae.mean(axis=1) * 1e6).tolist()}
 
     (REPORTS_DIR / "metrics_supervised.json").write_text(
         json.dumps(metrics, indent=2, ensure_ascii=False), encoding="utf-8")

@@ -21,7 +21,7 @@ import pandas as pd
 from sklearn.cluster import KMeans
 from sklearn.decomposition import PCA
 from sklearn.impute import SimpleImputer
-from sklearn.metrics import silhouette_score
+from sklearn.metrics import calinski_harabasz_score, davies_bouldin_score, silhouette_score
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
 
@@ -92,6 +92,9 @@ def main():
         "k_scores": scores.to_dict(orient="records"),
         "selected_k": best_k,
         "selected_silhouette": float(scores.loc[scores["k"] == best_k, "silhouette"].iloc[0]),
+        # Ek iç ölçütler (seçilen K için): Davies-Bouldin küçük = iyi, Calinski-Harabasz büyük = iyi
+        "selected_davies_bouldin": float(davies_bouldin_score(final[:-1].transform(X), df["cluster"])),
+        "selected_calinski_harabasz": float(calinski_harabasz_score(final[:-1].transform(X), df["cluster"])),
     }, indent=2, ensure_ascii=False), encoding="utf-8")
 
     # Grafik 1: elbow + silhouette

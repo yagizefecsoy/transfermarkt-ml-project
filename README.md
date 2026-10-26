@@ -65,6 +65,8 @@ Kaynak: [Transfermarkt veri seti (Kaggle, davidcariboo/player-scores)](https://w
 | ±%50 içinde | Tahmini gerçeğe yeterince yakın olanlar | %39,8 | %53,6 | **%70,9** |
 | 2 kat veya daha fazla yanlış | Çok kötü tahminlerin oranı | %46,7 | %35,7 | **%18,1** |
 | MAE | Ortalama mutlak hata | 2.119.818 € | 1.921.132 € | **1.367.863 €** |
+| MSE | Ortalama kare hata | 2,57·10¹³ €² | 2,83·10¹³ €² | **1,44·10¹³ €²** |
+| RMSE | MSE'nin karekökü | 5.068.387 € | 5.322.400 € | **3.795.777 €** |
 | R² | Varyansın ne kadarı açıklanıyor? | 0,703 | 0,672 | **0,833** |
 
 **Basitçe:** 10 oyuncudan ilk yaklaşım 4'ünü, ek özelliklerden önceki model 5'ini, final model **7'sini** gerçek değerin ±%50'si içinde tahmin ediyor.
@@ -72,6 +74,12 @@ Kaynak: [Transfermarkt veri seti (Kaggle, davidcariboo/player-scores)](https://w
 **Log dönüşümünde R² neden düştü?** R², büyük hataların karesine baktığı için birkaç pahalı yıldızın etkisine çok duyarlı. Log dönüşümü modeli bütün oyuncular için dengeli hale getiriyor. Bu yüzden ilk iki sütun arasında R² biraz düşerken tipik oyuncu için hata %41 azaldı. Proje ilk geliştirilirken log dönüşümü sadece R²'ye bakılarak geri alınmıştı. Diğer ölçütler kontrol edilince bu kararın yanlış olduğu görüldü.
 
 ![Gerçek vs tahmin](reports/figures/gercek_vs_tahmin.png)
+
+### Öğrenme eğrisi
+
+![Öğrenme eğrisi](reports/figures/ogrenme_egrisi.png)
+
+Doğrulama hatası (MAE) eğitim verisi arttıkça 1,77M €'dan 1,38M €'ya düşüyor ve hâlâ hafifçe iniyor: daha fazla oyuncu verisi işe yarar. Eğitim ve doğrulama hatası arasındaki açıklık, modelin eğitim verisini kısmen ezberlediğini gösteriyor.
 
 ### Hangi özellikler önemli?
 
@@ -128,6 +136,8 @@ Permutation importance yöntemiyle ölçüldü: bir özellik karıştırıldığ
 | 2 | 319 | 33,1 | 386 | 103 | 70 | 3,5M € | Kariyerli yıldızlar ve golcüler, milli takım oyuncuları |
 
 ![Kümeler](reports/figures/kumeler_pca.png)
+
+**Kümeleme ölçütleri (K=3):** Silhouette 0,326 (−1…1, büyük iyi) · Davies-Bouldin 1,32 (küçük iyi) · Calinski-Harabasz 4.092 (büyük iyi).
 
 **Yorum:** Kümeleme piyasa değerini görmedi, ama değer kümeler arasında sıralı olarak artıyor. Yani bulunan gruplar anlamlı. Yine de silhouette skoru 0,33 seviyesinde, kümeler net biçimde ayrışmıyor. Oyuncular kesin gruplardan çok "az deneyimliden çok deneyimliye" uzanan bir süreklilik üzerinde dağılıyor. Bu durum PCA grafiğinde de görülüyor.
 

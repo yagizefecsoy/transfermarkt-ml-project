@@ -45,12 +45,12 @@
     },
     {
       "k": 8,
-      "inertia": 52410.76750353307,
+      "inertia": 52410.767503533076,
       "silhouette": 0.2081829587728718
     },
     {
       "k": 9,
-      "inertia": 49826.37499210485,
+      "inertia": 49826.37499210486,
       "silhouette": 0.21060136480181502
     },
     {
@@ -60,5 +60,7 @@
     }
   ],
   "selected_k": 3,
-  "selected_silhouette": 0.32618494265754877
+  "selected_silhouette": 0.32618494265754877,
+  "selected_davies_bouldin": 1.3163459573774796,
+  "selected_calinski_harabasz": 4091.8852557942705
 }
